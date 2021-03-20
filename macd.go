@@ -2,7 +2,6 @@ package cryptosignals
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/adshao/go-binance/v2/futures"
@@ -19,6 +18,7 @@ type signalMACD struct {
 	notified       bool
 	notificator    Notificator
 	indicator      SignalIndicator
+	stop           chan struct{}
 }
 
 func (s *signalMACD) klineHandler(event *futures.WsKlineEvent) {
@@ -27,8 +27,12 @@ func (s *signalMACD) klineHandler(event *futures.WsKlineEvent) {
 	} else {
 		if s.lastTimeSeries != event.Kline.EndTime {
 			s.lastTimeSeries = event.Kline.EndTime
+			time.Sleep(time.Second)
 			s.init()
 		}
+	}
+	if s.notified {
+		return
 	}
 	ser := techan.NewTimeSeries()
 	ser.Candles = s.startSeries.Candles
@@ -44,8 +48,8 @@ func (s *signalMACD) klineHandler(event *futures.WsKlineEvent) {
 	}, ser)
 	signal := s.getSignal(ser)
 	cross, way := s.hasCross(signal)
-	if !s.notified && cross {
-		s.notificator(SignalEvent{Indicator: s.indicator, Position: way})
+	if cross {
+		s.notificator(SignalEvent{Indicator: s.indicator, Position: way, Symbol: s.symbol})
 		s.notified = true
 	}
 }
@@ -75,8 +79,7 @@ func (s *signalMACD) getSeries() *techan.TimeSeries {
 		Do(context.Background())
 
 	if err != nil {
-		fmt.Println(err)
-		return nil
+		panic(err)
 	}
 
 	series := techan.NewTimeSeries()
@@ -116,11 +119,18 @@ func (s *signalMACD) init() {
 	s.notified = false
 }
 
+func (s *signalMACD) errHandler(err error) {
+	select {
+	case s.stop <- struct{}{}:
+	default:
+	}
+}
+
 // Start run indicator
 // non block func
-func (s *signalMACD) Start() error {
+func (s *signalMACD) Start() (stop chan struct{}, err error) {
 	s.init()
-	_, _, err := futures.WsKlineServe(s.symbol, s.interval, s.klineHandler, func(err error) {
-	})
-	return err
+	_, stop, err = futures.WsKlineServe(s.symbol, s.interval, s.klineHandler, s.errHandler)
+	s.stop = stop
+	return stop, err
 }
