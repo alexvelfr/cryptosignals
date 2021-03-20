@@ -16,9 +16,9 @@ type signalMACD struct {
 	interval       string
 	lastSignal     big.Decimal
 	notified       bool
-	notificator    Notificator
 	indicator      SignalIndicator
 	stop           chan struct{}
+	res            chan SignalEvent
 }
 
 func (s *signalMACD) klineHandler(event *futures.WsKlineEvent) {
@@ -49,7 +49,7 @@ func (s *signalMACD) klineHandler(event *futures.WsKlineEvent) {
 	signal := s.getSignal(ser)
 	cross, way := s.hasCross(signal)
 	if cross {
-		s.notificator(SignalEvent{Indicator: s.indicator, Position: way, Symbol: s.symbol})
+		s.res <- SignalEvent{Indicator: s.indicator, Position: way, Symbol: s.symbol}
 		s.notified = true
 	}
 }
@@ -128,9 +128,10 @@ func (s *signalMACD) errHandler(err error) {
 
 // Start run indicator
 // non block func
-func (s *signalMACD) Start() (stop chan struct{}, err error) {
+func (s *signalMACD) Start() (res chan SignalEvent, stop chan struct{}, err error) {
 	s.init()
+	s.res = make(chan SignalEvent)
 	_, stop, err = futures.WsKlineServe(s.symbol, s.interval, s.klineHandler, s.errHandler)
 	s.stop = stop
-	return stop, err
+	return s.res, stop, err
 }

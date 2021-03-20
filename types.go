@@ -8,11 +8,8 @@ type SignalEvent struct {
 	Position  Position
 	Symbol    string
 }
-
-type Notificator func(event SignalEvent)
-
 type Signal interface {
-	Start() (stop chan struct{}, err error)
+	Start() (res chan SignalEvent, stop chan struct{}, err error)
 }
 
 const (
