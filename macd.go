@@ -69,7 +69,7 @@ func (s *signalMACD) parseKline(kline futures.Kline, series *techan.TimeSeries) 
 	series.AddCandle(candle)
 }
 
-func (s *signalMACD) getSeries() *techan.TimeSeries {
+func (s *signalMACD) getSeries() (*techan.TimeSeries, error) {
 	binanceClient := futures.NewClient("", "")
 	klines, err := binanceClient.
 		NewKlinesService().
@@ -79,7 +79,7 @@ func (s *signalMACD) getSeries() *techan.TimeSeries {
 		Do(context.Background())
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	series := techan.NewTimeSeries()
@@ -90,7 +90,7 @@ func (s *signalMACD) getSeries() *techan.TimeSeries {
 		}
 		s.parseKline(*kline, series)
 	}
-	return series
+	return series, nil
 }
 
 func (s *signalMACD) getSignal(series *techan.TimeSeries) big.Decimal {
@@ -113,10 +113,12 @@ func (s *signalMACD) hasCross(signal big.Decimal) (bool, Position) {
 	return false, ""
 }
 
-func (s *signalMACD) init() {
-	s.startSeries = s.getSeries()
+func (s *signalMACD) init() error {
+	var err error
+	s.startSeries, err = s.getSeries()
 	s.lastSignal = s.getSignal(s.startSeries)
 	s.notified = false
+	return err
 }
 
 func (s *signalMACD) errHandler(err error) {
@@ -129,9 +131,13 @@ func (s *signalMACD) errHandler(err error) {
 // Start run indicator
 // non block func
 func (s *signalMACD) Start() (res chan SignalEvent, stop chan struct{}, err error) {
-	s.init()
+	err = s.init()
 	s.res = make(chan SignalEvent)
+	res = s.res
+	if err != nil {
+		return res, stop, err
+	}
 	_, stop, err = futures.WsKlineServe(s.symbol, s.interval, s.klineHandler, s.errHandler)
 	s.stop = stop
-	return s.res, stop, err
+	return res, stop, err
 }
