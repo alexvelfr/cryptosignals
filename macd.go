@@ -116,6 +116,9 @@ func (s *signalMACD) hasCross(signal big.Decimal) (bool, Position) {
 func (s *signalMACD) init() error {
 	var err error
 	s.startSeries, err = s.getSeries()
+	if err != nil {
+		return err
+	}
 	s.lastSignal = s.getSignal(s.startSeries)
 	s.notified = false
 	return err
