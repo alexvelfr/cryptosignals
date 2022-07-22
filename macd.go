@@ -2,7 +2,6 @@ package cryptosignals
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/adshao/go-binance/v2/futures"
@@ -19,8 +18,8 @@ type signalMACD struct {
 	notified       bool
 	indicator      SignalIndicator
 	stop           chan struct{}
+	_stop          chan struct{}
 	res            chan SignalEvent
-	chanMu         sync.Mutex
 }
 
 func (s *signalMACD) klineHandler(event *futures.WsKlineEvent) {
@@ -127,10 +126,9 @@ func (s *signalMACD) init() error {
 }
 
 func (s *signalMACD) errHandler(err error) {
-	s.chanMu.Lock()
-	defer s.chanMu.Unlock()
 	select {
 	case s.stop <- struct{}{}:
+		s._stop <- struct{}{}
 	default:
 	}
 }
@@ -140,11 +138,12 @@ func (s *signalMACD) errHandler(err error) {
 func (s *signalMACD) Start() (res chan SignalEvent, stop chan struct{}, err error) {
 	err = s.init()
 	s.res = make(chan SignalEvent)
+	s.stop = make(chan struct{})
 	res = s.res
 	if err != nil {
 		return res, stop, err
 	}
 	_, stop, err = futures.WsKlineServe(s.symbol, s.interval, s.klineHandler, s.errHandler)
-	s.stop = stop
-	return res, stop, err
+	s._stop = stop
+	return res, s.stop, err
 }
