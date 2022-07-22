@@ -129,6 +129,7 @@ func (s *signalMACD) errHandler(err error) {
 	select {
 	case s.stop <- struct{}{}:
 		s._stop <- struct{}{}
+		close(s._stop)
 	default:
 	}
 }
