@@ -131,7 +131,6 @@ func (s *signalMACD) errHandler(err error) {
 	defer s.chanMu.Unlock()
 	select {
 	case s.stop <- struct{}{}:
-		close(s.res)
 	default:
 	}
 }
